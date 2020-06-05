@@ -1,4 +1,5 @@
-'''Part 1 - Load and clean the provided dataset, deal with missing/invalid data'''
+'''Part 2 - Now the dataset is a bit cleaner and a churn flag is present, evaluate
+how the dataset varies between accounts which churned/didn't churn.'''
 
 ####################################################################################################
 # Script Initialization                                                                            #
@@ -8,49 +9,19 @@ import os
 import pandas as pd
 from pyspark.sql import SparkSession
 
-# Set up a spark session
-spark = SparkSession.builder.appName(
-    'Sparkify'
-).getOrCreate()
+# Import from module starting with a number
+import importlib
+p2 = importlib.import_module(
+    '2_load_clean_data')
 
-
-# User Inputs ######################################################################################
-
-# One of: {'local', 'aws'}
-script_env = 'local'
-
-# Boolean
-use_full_dataset = False
-
-
-# Validate inputs ##################################################################################
-assert script_env in {'local', 'aws'}, 'Invalid input for script_env'
-assert isinstance(use_full_dataset, bool), 'Invalid input for use_full_dataset'
+spark = p2.spark
+script_env = p2.script_env
+data_cleaned = p2.data_cleaned
+data_cleaned.persist()
 
 
 
 ####################################################################################################
-# Data Tidying                                                                                     #
+# EDA                                                                                              #
 ####################################################################################################
-
-# Load data ########################################################################################
-
-if script_env == 'local':
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(script_dir)
-    data_dir = 'data'
-elif script_env == 'aws':
-    data_dir = 's3n://udacity-dsnd/sparkify'
-
-if use_full_dataset:
-    data_file = 'sparkify_event_data.json'
-else:
-    data_file = 'mini_sparkify_event_data.json'
-
-data_path = f"{data_dir}/{data_file}"
-
-data_raw = spark.read.json(data_path)
-
-
-# Fill in the gaps #################################################################################
 

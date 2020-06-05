@@ -228,7 +228,7 @@ data_gapfill = data_raw.groupby('sessionId').agg(
     ssf.max('registration').alias('registration'),
     ssf.max('gender').alias('gender'),
     ssf.max('firstName').alias('firstName'),
-    ssf.max('lastName').alias('lastName'),
+    ssf.max('lastName').alias('lastName')
 )
 
 # Drop these columns from the original dataset
@@ -258,6 +258,8 @@ data_cleaned = data_cleaned.withColumn('platform', platform_getter)
 def extract_state(location):
     # If multiple state codes given, just use the last one
     # Seems to happen with metropolitan areas which cross state lines?
+    if not isinstance(location, str):
+        return None
     state = location.split(',')[-1]
     state = state.split('-')[-1].strip()
     return state
@@ -291,3 +293,20 @@ def extract_song(song):
 song_getter = ssf.udf(extract_song, sst.StringType())
 
 data_cleaned = data_cleaned.withColumn('songCleaned', song_getter('song'))
+
+
+
+####################################################################################################
+# Define Churn                                                                                     #
+####################################################################################################
+
+r'''Origally this was going to go in EDA, but adding this field here will allow importing
+of the prepared dataset directly from 2 to 4. Should help keep the EDA file a bit cleaner'''
+
+data_cleaned = data_cleaned.withColumn(
+    'churnFlag',
+    ssf.when(data_cleaned['page'] == 'Cancellation Confirmation', 1).otherwise(0)
+).withColumn(
+    'downgradeFlag',
+    ssf.when(data_cleaned['page'] == 'Submit Downgrade', 1).otherwise(0)
+)
