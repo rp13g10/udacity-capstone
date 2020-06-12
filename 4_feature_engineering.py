@@ -317,12 +317,58 @@ level_cols = [x for x in outputs.columns if 'level' in x]
 merged = merged.fillna('unknown', subset=platform_cols)
 merged = merged.fillna('free', subset=level_cols)
 merged = merged.fillna(0)
+
+encoded = merged.persist()
 merged = merged.persist()
 
+merged_sample = merged.limit(1000).toPandas()
+
 # Final transformations ############################################################################
+from pyspark.ml import feature as smf
+
+# One-hot encoding of categorical variables --------------------------------------------------------
+
+cat_cols = ['gender', 'state', 'platform', 'level']
+cat_cols = [x for x in encoded.columns if any((y for y in cat_cols if y in x))]
+
+def fill_empty_string(string_in, fill_value='unknown'):
+    if not isinstance(string_in, str):
+        return fill_value
+    elif not string_in:
+        return fill_value
+    else:
+        return string_in
+
+na_handler = ssf.udf(fill_empty_string, sst.StringType())
+
+indexers = {}
+for cat_col in cat_cols:
+    encoded = encoded.withColumn(cat_col, na_handler(cat_col))
+    indexer = smf.StringIndexer(
+        inputCol=cat_col,
+        outputCol=f"{cat_col}Inx"
+    )
+    indexer = indexer.fit(encoded)
+    encoded = indexer.transform(encoded)
+    encoded = encoded.drop(cat_col).withColumnRenamed(f"{cat_col}Inx", cat_col)
+    indexers[cat_col] = indexer
+
+
+encoder = smf.OneHotEncoderEstimator(
+    inputCols=cat_cols,
+    outputCols=cat_cols
+)
+encoder = encoder.fit(encoded)
+encoded = encoder.transform(encoded)
+encoded.show()
+
 
 # Dimensionality Reduction #########################################################################
 
+
+
 # Scaling ##########################################################################################
+
+
 
 # Determine sensible date ranges ###################################################################
