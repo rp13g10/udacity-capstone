@@ -39,6 +39,8 @@ data_cleaned = data_cleaned.orderBy(
 ).persist()
 data_sample = data_cleaned.limit(1000).toPandas()
 
+data_cleaned.write.parquet('data/cached/data_cleaned.parquet')
+
 # Static variables (no time dependency) ############################################################
 
 static_vars = data_cleaned.groupby('userId').agg(
@@ -318,18 +320,20 @@ merged = merged.fillna('unknown', subset=platform_cols)
 merged = merged.fillna('free', subset=level_cols)
 merged = merged.fillna(0)
 
-encoded = merged.persist()
 merged = merged.persist()
 
-merged_sample = merged.limit(1000).toPandas()
+# Write to disk as this takes an age to calculate...
+merged.write.parquet("data/cached/merged.parquet")
 
 # Final transformations ############################################################################
 from pyspark.ml import feature as smf
 
 # One-hot encoding of categorical variables --------------------------------------------------------
 
+merged = spark.read.parquet('data/cached/merged.parquet')
+
 cat_cols = ['gender', 'state', 'platform', 'level']
-cat_cols = [x for x in encoded.columns if any((y for y in cat_cols if y in x))]
+cat_cols = [x for x in merged.columns if any((y for y in cat_cols if y in x))]
 
 def fill_empty_string(string_in, fill_value='unknown'):
     if not isinstance(string_in, str):
@@ -343,28 +347,37 @@ na_handler = ssf.udf(fill_empty_string, sst.StringType())
 
 indexers = {}
 for cat_col in cat_cols:
-    encoded = encoded.withColumn(cat_col, na_handler(cat_col))
+    merged = merged.withColumn(cat_col, na_handler(cat_col))
     indexer = smf.StringIndexer(
         inputCol=cat_col,
         outputCol=f"{cat_col}Inx"
     )
-    indexer = indexer.fit(encoded)
-    encoded = indexer.transform(encoded)
-    encoded = encoded.drop(cat_col).withColumnRenamed(f"{cat_col}Inx", cat_col)
+    indexer = indexer.fit(merged)
+    merged = indexer.transform(merged)
+    merged = merged.drop(cat_col).withColumnRenamed(f"{cat_col}Inx", cat_col)
     indexers[cat_col] = indexer
 
+# merged.write.parquet('data/cached/indexed.parquet')
 
 encoder = smf.OneHotEncoderEstimator(
     inputCols=cat_cols,
-    outputCols=cat_cols
+    outputCols=[f"{x}Vec" for x in cat_cols]
 )
-encoder = encoder.fit(encoded)
-encoded = encoder.transform(encoded)
-encoded.show()
+encoder = encoder.fit(merged)
+encoded = encoder.transform(merged)
+encoded = encoded.drop(*cat_cols)
+
+encoded = encoded.persist()
+
+encoded.write.parquet("data/cached/encoded.parquet", mode='overwrite')
+encoded_sample = encoded.limit(1000).toPandas()
 
 
-# Dimensionality Reduction #########################################################################
+# Scaling & Dimensionality Reduction ###############################################################
 
+# Part 1 - use VectorAssembler to combine all features into a single vector
+# Part 2 - use StandardScaler to normalize all vectors
+# Part 3 - use PCA to reduce dimensionality of scaled vectors
 
 
 # Scaling ##########################################################################################
