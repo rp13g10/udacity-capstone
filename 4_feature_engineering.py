@@ -43,6 +43,8 @@ data_cleaned.write.parquet('data/cached/data_cleaned.parquet')
 
 # Static variables (no time dependency) ############################################################
 
+data_cleaned = spark.read.parquet('data/cached/data_cleaned.parquet')
+
 static_vars = data_cleaned.groupby('userId').agg(
     #pylint: disable=no-member
     ssf.max('gender').alias('gender'),
@@ -370,18 +372,3 @@ encoded = encoded.drop(*cat_cols)
 encoded = encoded.persist()
 
 encoded.write.parquet("data/cached/encoded.parquet", mode='overwrite')
-encoded_sample = encoded.limit(1000).toPandas()
-
-
-# Scaling & Dimensionality Reduction ###############################################################
-
-# Part 1 - use VectorAssembler to combine all features into a single vector
-# Part 2 - use StandardScaler to normalize all vectors
-# Part 3 - use PCA to reduce dimensionality of scaled vectors
-
-
-# Scaling ##########################################################################################
-
-
-
-# Determine sensible date ranges ###################################################################
