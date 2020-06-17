@@ -14,7 +14,6 @@ script_env = p2.script_env
 # Set up pipeline ##################################################################################
 
 encoded = spark.read.parquet('data/cached/encoded.parquet')
-encoded_sample = encoded.limit(1000).toPandas()
 
 # Use VectorAssembler to combine all features into a single vector
 feature_cols = [x for x in encoded.columns if x not in {'userId', 'userChurnFlag'}]
@@ -24,6 +23,9 @@ assembler = smf.VectorAssembler(
 encoded = assembler.transform(encoded)
 encoded = encoded.drop(*feature_cols)
 encoded = encoded.withColumnRenamed('userChurnFlag', 'label')
+encoded = encoded.persist()
+
+encoded_sample = encoded.limit(1000).toPandas()
 
 # Split out validation dataset
 train, val = encoded.randomSplit([3.0, 1.0], seed=42)
@@ -55,10 +57,15 @@ pipeline = sm.Pipeline(
 )
 
 # Create an evaluator which will quantify model performance
-evaluator = sme.BinaryClassificationEvaluator(
+# evaluator = sme.BinaryClassificationEvaluator(
+#     labelCol='label',
+#     rawPredictionCol='predictedLabel',
+#     metricName='areaUnderROC'
+# )
+eval_f1 = sme.MulticlassClassificationEvaluator(
     labelCol='label',
-    rawPredictionCol='predictedLabel',
-    metricName='areaUnderROC'
+    predictionCol='predictedLabel',
+    metricName='f1'
 )
 
 # Set up a parameter grid for cross validation
@@ -68,13 +75,13 @@ param_grid = smt.ParamGridBuilder().addGrid(
     classifier.maxDepth, [2, 5, 10]
 ).addGrid(
     classifier.subsamplingRate, [0.1, 0.2, 0.3]
-)
+).build()
 
 # Bring everything together
 validator = smt.CrossValidator(
     estimator=pipeline,
     estimatorParamMaps=param_grid,
-    evaluator=evaluator,
+    evaluator=eval_f1,
     numFolds=3
 )
 
@@ -83,3 +90,44 @@ model = validator.fit(train)
 
 train_predictions = model.transform(train)
 val_predictions = model.transform(val)
+
+# Evaluate model performance
+
+eval_roc = sme.BinaryClassificationEvaluator(
+    labelCol='label',
+    rawPredictionCol='predictedLabel',
+    metricName='areaUnderROC'
+)
+
+eval_accuracy = sme.MulticlassClassificationEvaluator(
+    labelCol='label',
+    predictionCol='predictedLabel',
+    metricName='accuracy'
+)
+
+eval_precision = sme.MulticlassClassificationEvaluator(
+    labelCol='label',
+    predictionCol='predictedLabel',
+    metricName='weightedPrecision'
+)
+
+eval_recall = sme.MulticlassClassificationEvaluator(
+    labelCol='label',
+    predictionCol='predictedLabel',
+    metricName='weightedRecall'
+)
+
+train_f1 = eval_f1.evaluate(train_predictions)
+val_f1 = eval_f1.evaluate(val_predictions)
+
+train_auc = eval_roc.evaluate(train_predictions)
+val_auc = eval_roc.evaluate(val_predictions)
+
+train_acc = eval_accuracy.evaluate(train_predictions)
+val_acc = eval_accuracy.evaluate(val_predictions)
+
+train_prec = eval_precision.evaluate(train_predictions)
+val_prec = eval_precision.evaluate(val_predictions)
+
+train_rec = eval_recall.evaluate(train_predictions)
+val_rec = eval_recall.evaluate(val_predictions)
