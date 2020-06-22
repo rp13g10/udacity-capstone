@@ -12,9 +12,16 @@ import pyspark.sql.types as sst
 import re
 from pyspark.sql import SparkSession
 
+# Set environment variables
+os.environ['SPARK_LOCAL_IP'] = 'localhost'
+
 # Set up a spark session
 spark = SparkSession.builder.appName(
     'Sparkify'
+).config(
+    'spark.driver.maxResultSize', '0'
+).config(
+    'spark.driver.memory', '16g'
 ).getOrCreate()
 
 
@@ -24,7 +31,7 @@ spark = SparkSession.builder.appName(
 script_env = 'local'
 
 # Boolean
-use_full_dataset = False
+use_full_dataset = True
 
 
 # Validate inputs ##################################################################################
@@ -54,6 +61,7 @@ else:
 data_path = f"{data_dir}/{data_file}"
 
 data_raw = spark.read.json(data_path)
+data_raw = data_raw.repartition(64, "userId")
 
 
 # Schema exploration ###############################################################################
@@ -229,7 +237,7 @@ data_gapfill = data_raw.groupby('sessionId').agg(
     ssf.max('gender').alias('gender'),
     ssf.max('firstName').alias('firstName'),
     ssf.max('lastName').alias('lastName')
-)
+).persist()
 
 # Drop these columns from the original dataset
 data_cleaned = data_raw.drop(

@@ -36,14 +36,14 @@ if script_env == 'local':
 # # Trigger evaluation of the datset up to this point
 data_cleaned = data_cleaned.orderBy(
     'userID', 'ts', ascending=True
-).persist()
-data_sample = data_cleaned.limit(1000).toPandas()
+)
+# data_sample = data_cleaned.limit(1000).toPandas()
 
-data_cleaned.write.parquet('data/cached/data_cleaned.parquet')
+# data_cleaned.write.parquet('data/cached/data_cleaned.parquet')
 
 # Static variables (no time dependency) ############################################################
 
-data_cleaned = spark.read.parquet('data/cached/data_cleaned.parquet')
+# data_cleaned = spark.read.parquet('data/cached/data_cleaned.parquet')
 
 static_vars = data_cleaned.groupby('userId').agg(
     #pylint: disable=no-member
@@ -60,7 +60,7 @@ static_vars = static_vars.withColumn(
 
 static_vars = static_vars.drop('lastTs', 'registration')
 
-static_sample = static_vars.limit(1000).toPandas()
+# static_sample = static_vars.limit(1000).toPandas()
 
 # Dynamic variables (evaluated over a time window) #################################################
 
@@ -322,7 +322,7 @@ merged = merged.fillna('unknown', subset=platform_cols)
 merged = merged.fillna('free', subset=level_cols)
 merged = merged.fillna(0)
 
-merged = merged.persist()
+
 
 # Write to disk as this takes an age to calculate...
 merged.write.parquet("data/cached/merged.parquet")
