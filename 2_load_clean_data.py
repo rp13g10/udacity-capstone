@@ -19,9 +19,13 @@ os.environ['SPARK_LOCAL_IP'] = 'localhost'
 spark = SparkSession.builder.appName(
     'Sparkify'
 ).config(
-    'spark.driver.maxResultSize', '0'
+    'spark.master', 'local[*,4]'
 ).config(
-    'spark.driver.memory', '16g'
+    'spark.task.maxFailures', '4'
+).config(
+    'spark.driver.memory', '12g'
+).config(
+    'spark.executor.memory', '12g'
 ).getOrCreate()
 
 
@@ -53,15 +57,26 @@ if script_env == 'local':
 elif script_env == 'aws':
     data_dir = 's3n://udacity-dsnd/sparkify'
 
-if use_full_dataset:
-    data_file = 'sparkify_event_data.json'
-else:
+if not use_full_dataset:
     data_file = 'mini_sparkify_event_data.json'
+    data_path = f"{data_dir}/{data_file}"
+    data_raw = spark.read.json(data_path)
+else:
+    try:
+        data_file = 'sparkify_event_data.parquet'
+        data_path = f"{data_dir}/{data_file}"
+        data_raw = spark.read.parquet(data_path)
+    except:
+        data_file = 'sparkify_event_data.json'
+        data_path = f"{data_dir}/{data_file}"
+        data_raw = spark.read.json(data_path)
+        data_raw.write.parquet(f"{data_dir}/sparkify_event_data.parquet")
+
 
 data_path = f"{data_dir}/{data_file}"
 
-data_raw = spark.read.json(data_path)
-data_raw = data_raw.repartition(64, "userId")
+
+data_raw = data_raw.repartition(60, "userId")
 
 
 # Schema exploration ###############################################################################

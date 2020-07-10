@@ -247,6 +247,55 @@ def get_page_clicks(data_in, name):
     return page_clicks
 
 
+def get_page_clicks_alt(data_in, name):
+    '''Alernate form of get_page_clicks, avoids use of the pivot function to
+    (hopefully) allow the code to run when using the full dataset'''
+
+    # Ensure consistent column headers regardless of the dataset
+    included_pages = [
+        'About', 'Add Friend', 'Add to Playlist', 'Cancel', 'Downgrade',
+        'Error', 'Help', 'Home', 'Login', 'Logout', 'NextSong', 'Register',
+        'Roll Advert', 'Save Settings', 'Settings', 'Submit Downgrade', 'Submit Registration',
+        'Submit Upgrade', 'Thumbs Down', 'Thumbs Up', 'Upgrade'
+    ]
+
+    def format_page(page):
+        if not isinstance(page, str):
+            return None
+        
+        page = page.replace(' ', '')
+        page = f'{page}{name}'
+        return page
+    
+    page_getter = ssf.udf(format_page, sst.StringType())
+
+    page_clicks = data_in.withColumn('page', page_getter('page'))
+
+    page_clicks = page_clicks.select('userId', 'page').dropna(how='any')
+
+    included_pages = [format_page(x) for x in included_pages]
+
+    # Add new field for count of each page
+    for included_page in included_pages:
+        page_clicks = page_clicks.withColumn(
+            included_page,
+            ssf.when(page_clicks['page'] == included_page, 1).otherwise(0)
+        )
+    
+    # Set up list of aggregations to be applied
+    aggregations = [
+        #pylint: disable=no-member
+        ssf.sum(col).alias(col)
+        for col in included_pages
+    ]
+
+    page_clicks = page_clicks.groupby('userId').agg(*aggregations)
+
+    return page_clicks
+
+
+
+
 # Generate all required tables ---------------------------------------------------------------------
 
 # Get the max timestamp
@@ -285,7 +334,7 @@ for name, start_ts in start_times.items():
 
     popularity_scores = get_popularity_scores(data_subset, name)
 
-    page_clicks = get_page_clicks(data_subset, name)
+    page_clicks = get_page_clicks_alt(data_subset, name)
 
     merged = modal_system.join(
         simple_aggregates,
@@ -361,7 +410,7 @@ for cat_col in cat_cols:
 
 # merged.write.parquet('data/cached/indexed.parquet')
 
-encoder = smf.OneHotEncoderEstimator(
+encoder = smf.OneHotEncoder(
     inputCols=cat_cols,
     outputCols=[f"{x}Vec" for x in cat_cols]
 )
